@@ -1,0 +1,57 @@
+name: Daily Notification Sender
+
+# 🕐 Ejecutar automáticamente todos los días a las 9:00 AM (UTC-6 = 3:00 PM UTC)
+# Para horario de México (UTC-6), 9 AM = 15:00 UTC
+on:
+  schedule:
+    # Ejecutar a las 15:00 UTC (9:00 AM Mexico City Time)
+    - cron: '0 15 * * *'
+  
+  # Permitir ejecución manual desde GitHub Actions UI
+  workflow_dispatch:
+
+jobs:
+  send-notifications:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: 📧 Call notification processing endpoint
+        run: |
+          echo "🔄 Starting automated notification processing..."
+          
+          # Llamar al endpoint de procesamiento de notificaciones (POST)
+          # IMPORTANTE: Supabase requiere el header Authorization incluso para endpoints públicos
+          response=$(curl -s -w "\n%{http_code}" -X POST \
+            -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJ1cWZpdmN0dmZvYnd4aXFtYnV0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3MzA0MTMyODMsImV4cCI6MjA0NTk4OTI4M30.SaNNtPeqt_hLJAjuqjhxWOe3r2XW-1yMfI1Gp-gFV-0" \
+            -H "Content-Type: application/json" \
+            https://buqfivctvfobwxiqmbut.supabase.co/functions/v1/make-server-8fc06582/process-notifications)
+          
+          # Separar el cuerpo de la respuesta del código HTTP
+          http_code=$(echo "$response" | tail -n1)
+          body=$(echo "$response" | sed '$d')
+          
+          echo "📊 Response Code: $http_code"
+          echo "📄 Response Body: $body"
+          
+          # Verificar si fue exitoso
+          if [ "$http_code" -eq 200 ]; then
+            echo "✅ Notifications processed successfully!"
+            
+            # Parsear y mostrar estadísticas
+            sent_count=$(echo "$body" | grep -o '"sentCount":[0-9]*' | grep -o '[0-9]*')
+            skipped_count=$(echo "$body" | grep -o '"skippedCount":[0-9]*' | grep -o '[0-9]*')
+            error_count=$(echo "$body" | grep -o '"errorCount":[0-9]*' | grep -o '[0-9]*')
+            
+            echo "📊 Statistics:"
+            echo "  ✉️  Sent: $sent_count"
+            echo "  ⏭️  Skipped: $skipped_count"
+            echo "  ❌ Errors: $error_count"
+          else
+            echo "❌ Failed to process notifications"
+            exit 1
+          fi
+
+      - name: 📝 Log completion
+        if: always()
+        run: |
+          echo "⏰ Notification processing job completed at $(date)"
